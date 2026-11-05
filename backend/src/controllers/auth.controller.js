@@ -8,6 +8,7 @@ const {
 
 const { sequelize } = require("../config/database");
 const environment = require("../config/environment");
+const bcrypt = require("bcryptjs");
 
 const {
   generateAccessToken,
@@ -16,8 +17,6 @@ const {
   getDurationMs,
   verifyRefreshToken,
 } = require("../utils/token.utils");
-
-const bcrypt = require("bcryptjs");
 
 const REFRESH_COOKIE_NAME = "bus_pool_refresh";
 
@@ -91,7 +90,7 @@ const validateAccount = (user) => {
   return null;
 };
 
-const createSession = async (user, res, transaction = null) => {
+const createSession = async (user, res, transaction) => {
   const accessToken = generateAccessToken(user);
   const refreshToken = createRefreshJwt(user);
 
@@ -114,7 +113,7 @@ const createSession = async (user, res, transaction = null) => {
 // POST /api/auth/login
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (
       typeof email !== "string" ||
@@ -128,10 +127,10 @@ const login = async (req, res, next) => {
       });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
     const user = await User.findOne({
-      where: { email: normalizedEmail },
+      where: {
+        email: email.trim().toLowerCase(),
+      },
       include: [
         {
           model: Role,
@@ -182,7 +181,11 @@ const login = async (req, res, next) => {
         { transaction }
       );
 
-      const accessToken = await createSession(user, res, transaction);
+      const accessToken = await createSession(
+        user,
+        res,
+        transaction
+      );
 
       await transaction.commit();
 
@@ -204,7 +207,10 @@ const login = async (req, res, next) => {
         },
       });
     } catch (error) {
-      await transaction.rollback();
+      if (!transaction.finished) {
+        await transaction.rollback();
+      }
+
       clearRefreshCookie(res);
       throw error;
     }
@@ -215,6 +221,8 @@ const login = async (req, res, next) => {
 
 // POST /api/auth/refresh
 const refresh = async (req, res, next) => {
+  let transaction;
+
   try {
     const oldToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
@@ -238,7 +246,11 @@ const refresh = async (req, res, next) => {
       });
     }
 
-    if (decoded.type !== "refresh") {
+    if (
+      decoded.type !== "refresh" ||
+      !decoded.sub ||
+      !Number.isInteger(decoded.tokenVersion)
+    ) {
       clearRefreshCookie(res);
 
       return res.status(401).json({
@@ -247,91 +259,103 @@ const refresh = async (req, res, next) => {
       });
     }
 
-    const transaction = await sequelize.transaction();
+    transaction = await sequelize.transaction();
 
-    try {
-      const oldTokenHash = hashToken(oldToken);
+    const storedToken = await RefreshToken.findOne({
+      where: {
+        userId: decoded.sub,
+        tokenHash: hashToken(oldToken),
+        revokedAt: null,
+      },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
 
-      const storedToken = await RefreshToken.findOne({
-        where: {
-          userId: decoded.sub,
-          tokenHash: oldTokenHash,
-          revokedAt: null,
-        },
-        transaction,
-        lock: transaction.LOCK.UPDATE,
+    if (
+      !storedToken ||
+      new Date(storedToken.expiresAt).getTime() <= Date.now()
+    ) {
+      await transaction.rollback();
+      clearRefreshCookie(res);
+
+      return res.status(401).json({
+        success: false,
+        message: "Refresh token is invalid or expired.",
       });
+    }
 
-      if (
-        !storedToken ||
-        new Date(storedToken.expiresAt).getTime() <= Date.now()
-      ) {
-        await transaction.rollback();
-        clearRefreshCookie(res);
+    const user = await loadUser(decoded.sub, transaction);
+    const accountError = validateAccount(user);
 
-        return res.status(401).json({
-          success: false,
-          message: "Refresh token is invalid or expired.",
-        });
-      }
-
-      const user = await loadUser(decoded.sub, transaction);
-      const accountError = validateAccount(user);
-
-      if (accountError) {
-        await storedToken.update(
-          { revokedAt: new Date() },
-          { transaction }
-        );
-
-        await transaction.commit();
-        clearRefreshCookie(res);
-
-        return res.status(403).json({
-          success: false,
-          message: accountError,
-        });
-      }
-
+    if (accountError) {
       await storedToken.update(
         { revokedAt: new Date() },
         { transaction }
       );
 
-      const accessToken = generateAccessToken(user);
-      const newRefreshToken = createRefreshJwt(user);
+      await transaction.commit();
+      clearRefreshCookie(res);
 
-      await RefreshToken.create(
-        {
-          userId: user.id,
-          tokenHash: hashToken(newRefreshToken),
-          expiresAt: new Date(
-            Date.now() + getDurationMs(environment.jwt.refreshExpiresIn)
-          ),
-        },
+      return res.status(403).json({
+        success: false,
+        message: accountError,
+      });
+    }
+
+    // Reject refresh tokens created before a session reset.
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      await storedToken.update(
+        { revokedAt: new Date() },
         { transaction }
       );
 
       await transaction.commit();
+      clearRefreshCookie(res);
 
-      setRefreshCookie(res, newRefreshToken);
-
-      return res.status(200).json({
-        success: true,
-        message: "Token refreshed successfully.",
-        data: {
-          accessToken,
-          tokenType: "Bearer",
-          expiresIn: environment.jwt.accessExpiresIn,
-        },
+      return res.status(401).json({
+        success: false,
+        message: "Your session has expired. Please login again.",
       });
-    } catch (error) {
-      if (!transaction.finished) {
-        await transaction.rollback();
-      }
-      throw error;
     }
+
+    // Rotate refresh token.
+    await storedToken.update(
+      { revokedAt: new Date() },
+      { transaction }
+    );
+
+    const accessToken = generateAccessToken(user);
+    const newRefreshToken = createRefreshJwt(user);
+
+    await RefreshToken.create(
+      {
+        userId: user.id,
+        tokenHash: hashToken(newRefreshToken),
+        expiresAt: new Date(
+          Date.now() + getDurationMs(environment.jwt.refreshExpiresIn)
+        ),
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    setRefreshCookie(res, newRefreshToken);
+
+    return res.status(200).json({
+      success: true,
+      message: "Token refreshed successfully.",
+      data: {
+        accessToken,
+        tokenType: "Bearer",
+        expiresIn: environment.jwt.accessExpiresIn,
+      },
+    });
   } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+
     next(error);
   }
 };
@@ -364,8 +388,182 @@ const logout = async (req, res, next) => {
   }
 };
 
+// POST /api/auth/logout-all
+const logoutAllDevices = async (req, res, next) => {
+  let transaction;
+
+  try {
+    transaction = await sequelize.transaction();
+
+    const user = await User.findByPk(req.user.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!user || user.status !== "active") {
+      await transaction.rollback();
+
+      return res.status(401).json({
+        success: false,
+        message: "User account is unavailable.",
+      });
+    }
+
+    // Incrementing this invalidates every existing access and refresh token.
+    await user.increment("tokenVersion", {
+      by: 1,
+      transaction,
+    });
+
+    await RefreshToken.update(
+      { revokedAt: new Date() },
+      {
+        where: {
+          userId: user.id,
+          revokedAt: null,
+        },
+        transaction,
+      }
+    );
+
+    await transaction.commit();
+
+    clearRefreshCookie(res);
+
+    return res.status(200).json({
+      success: true,
+      message: "Successfully logged out from all devices. Please login again.",
+    });
+  } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+
+    next(error);
+  }
+};
+
+// POST /api/auth/change-password
+const changePassword = async (req, res, next) => {
+  let transaction;
+
+  try {
+    const {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    } = req.body || {};
+
+    if (
+      typeof currentPassword !== "string" ||
+      typeof newPassword !== "string" ||
+      typeof confirmPassword !== "string" ||
+      !currentPassword ||
+      !newPassword ||
+      !confirmPassword
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All password fields are required.",
+      });
+    }
+
+    if (
+      newPassword.length < 8 ||
+      newPassword.length > 72
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be between 8 and 72 characters.",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match.",
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from current password.",
+      });
+    }
+
+    transaction = await sequelize.transaction();
+
+    const user = await User.findByPk(req.user.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!user || user.status !== "active") {
+      await transaction.rollback();
+
+      return res.status(401).json({
+        success: false,
+        message: "User account is unavailable.",
+      });
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash
+    );
+
+    if (!passwordMatches) {
+      await transaction.rollback();
+
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect.",
+      });
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    await user.update(
+      {
+        passwordHash: newPasswordHash,
+        tokenVersion: user.tokenVersion + 1,
+      },
+      { transaction }
+    );
+
+    await RefreshToken.update(
+      { revokedAt: new Date() },
+      {
+        where: {
+          userId: user.id,
+          revokedAt: null,
+        },
+        transaction,
+      }
+    );
+
+    await transaction.commit();
+
+    clearRefreshCookie(res);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully. Please login again.",
+    });
+  } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+
+    next(error);
+  }
+};
+
 module.exports = {
   login,
   refresh,
   logout,
+  logoutAllDevices,
+  changePassword,
 };

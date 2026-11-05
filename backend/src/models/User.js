@@ -1,3 +1,4 @@
+
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/database");
 
@@ -43,6 +44,15 @@ const User = sequelize.define(
       allowNull: false,
       defaultValue: "active",
     },
+
+    // Used to invalidate previously issued access tokens
+    tokenVersion: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      field: "token_version",
+    },
+
     lastLoginAt: {
       type: DataTypes.DATE,
       allowNull: true,
