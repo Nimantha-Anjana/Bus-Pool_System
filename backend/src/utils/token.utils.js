@@ -8,6 +8,7 @@ const generateAccessToken = (user) => {
     {
       sub: String(user.id),
       role: user.role.name,
+      tokenVersion: user.tokenVersion,
     },
     environment.jwt.accessSecret,
     {
@@ -65,6 +66,7 @@ const createRefreshJwt = (user) => {
     {
       sub: String(user.id),
       type: "refresh",
+      tokenVersion: user.tokenVersion,
     },
     environment.jwt.refreshSecret,
     {

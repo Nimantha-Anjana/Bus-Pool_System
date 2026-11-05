@@ -17,7 +17,11 @@ const authenticate = async (req, res, next) => {
 
     const decoded = verifyAccessToken(token);
 
-    if (!decoded.sub || !decoded.role) {
+    if (
+      !decoded.sub ||
+      !decoded.role ||
+      !Number.isInteger(decoded.tokenVersion)
+    ) {
       return res.status(401).json({
         success: false,
         message: "Invalid authentication token.",
@@ -46,6 +50,14 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "User account is inactive or unavailable.",
+      });
+    }
+
+    // Check whether this token has been invalidated.
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      return res.status(401).json({
+        success: false,
+        message: "Your session has expired. Please login again.",
       });
     }
 
@@ -90,6 +102,7 @@ const authenticate = async (req, res, next) => {
       lastName: user.lastName,
       role: user.role.name,
       driverId: user.driver?.id || null,
+      tokenVersion: user.tokenVersion,
     };
 
     next();
