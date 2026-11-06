@@ -1,10 +1,10 @@
-
 const express = require("express");
 
 const {
   login,
   refresh,
   logout,
+  logoutAllDevices,
   changePassword,
 } = require("../controllers/auth.controller");
 
@@ -17,6 +17,8 @@ router.post("/login", login);
 router.post("/refresh", refresh);
 
 router.post("/logout", logout);
+
+router.post("/logout-all", authenticate, logoutAllDevices);
 
 router.post("/change-password", authenticate, changePassword);
 
