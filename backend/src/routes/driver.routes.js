@@ -4,6 +4,13 @@ const router = express.Router();
 
 const { authenticate } = require("../middleware/auth.middleware");
 const authorize = require("../middleware/role.middleware");
+const {
+  getMyAssignments,
+  getMyAssignment,
+  acceptAssignment,
+  rejectAssignment,
+} = require("../controllers/driver-assignment.controller");
+const { saveLocation } = require("../controllers/gps.controller");
 
 // All routes below require Driver authentication
 router.use(authenticate);
@@ -32,5 +39,14 @@ router.get("/profile", (req, res) => {
     },
   });
 });
+
+// Assignments sent to this driver
+router.get("/assignments", getMyAssignments);
+router.get("/assignments/:id", getMyAssignment);
+router.post("/assignments/:id/accept", acceptAssignment);
+router.post("/assignments/:id/reject", rejectAssignment);
+
+// GPS tracking (confirmed assignment + ongoing tour only)
+router.post("/gps", saveLocation);
 
 module.exports = router;

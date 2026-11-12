@@ -19,6 +19,12 @@ const TourStop = sequelize.define(
       allowNull: false,
       field: "stop_name",
     },
+    stopType: {
+      type: DataTypes.ENUM("pickup", "stop", "drop"),
+      allowNull: false,
+      defaultValue: "stop",
+      field: "stop_type",
+    },
     locationAddress: {
       type: DataTypes.STRING(255),
       allowNull: true,
