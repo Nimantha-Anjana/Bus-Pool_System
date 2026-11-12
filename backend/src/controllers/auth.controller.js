@@ -9,6 +9,7 @@ const {
 const { sequelize } = require("../config/database");
 const environment = require("../config/environment");
 const bcrypt = require("bcryptjs");
+const { logActivity } = require("../services/activity.service");
 
 const {
   generateAccessToken,
@@ -188,6 +189,15 @@ const login = async (req, res, next) => {
       );
 
       await transaction.commit();
+
+      await logActivity({
+        req,
+        userId: user.id,
+        action: "auth.login",
+        entityType: "users",
+        entityId: user.id,
+        description: `${user.role.name} logged in.`,
+      });
 
       return res.status(200).json({
         success: true,

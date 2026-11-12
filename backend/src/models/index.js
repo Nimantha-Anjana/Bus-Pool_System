@@ -2,7 +2,10 @@ const Role = require("./Role");
 const User = require("./User");
 const BusOwner = require("./BusOwner");
 const Driver = require("./Driver");
+const DriverDocument = require("./DriverDocument");
 const Bus = require("./Bus");
+const BusImage = require("./BusImage");
+const BusFacility = require("./BusFacility");
 const Tour = require("./Tour");
 const TourStop = require("./TourStop");
 const TourAssignment = require("./TourAssignment");
@@ -36,6 +39,18 @@ Driver.belongsTo(User, {
   as: "user",
 });
 
+// DRIVER ↔ DRIVER DOCUMENTS
+Driver.hasMany(DriverDocument, {
+  foreignKey: "driverId",
+  as: "documents",
+  onDelete: "CASCADE",
+});
+
+DriverDocument.belongsTo(Driver, {
+  foreignKey: "driverId",
+  as: "driver",
+});
+
 // BUS OWNER ↔ BUS
 BusOwner.hasMany(Bus, {
   foreignKey: "ownerId",
@@ -45,6 +60,30 @@ BusOwner.hasMany(Bus, {
 Bus.belongsTo(BusOwner, {
   foreignKey: "ownerId",
   as: "owner",
+});
+
+// BUS ↔ BUS IMAGES
+Bus.hasMany(BusImage, {
+  foreignKey: "busId",
+  as: "images",
+  onDelete: "CASCADE",
+});
+
+BusImage.belongsTo(Bus, {
+  foreignKey: "busId",
+  as: "bus",
+});
+
+// BUS ↔ BUS FACILITIES
+Bus.hasMany(BusFacility, {
+  foreignKey: "busId",
+  as: "busFacilities",
+  onDelete: "CASCADE",
+});
+
+BusFacility.belongsTo(Bus, {
+  foreignKey: "busId",
+  as: "bus",
 });
 
 // USER ↔ TOUR (creator)
@@ -206,7 +245,10 @@ module.exports = {
   User,
   BusOwner,
   Driver,
+  DriverDocument,
   Bus,
+  BusImage,
+  BusFacility,
   Tour,
   TourStop,
   TourAssignment,

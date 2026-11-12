@@ -9,7 +9,12 @@
     "check:models": "node scripts/check-models.js",
     "seed:admin": "node scripts/seed-admin.js",
     "seed:sample": "node scripts/seed-sample-data.js",
-    "test:relationships": "node scripts/check-relationships.js"
+    "test:relationships": "node scripts/check-relationships.js",
+    "db:bus-tables": "node scripts/create-bus-tables.js",
+    "db:driver-tour": "node scripts/migrate-driver-tour.js",
+    "test:assignments": "node scripts/test-assignment-gps-notification-apis.js",
+    "test:admin-driver-tour": "node scripts/test-admin-driver-tour-apis.js",
+    "test:admin-bus": "node scripts/test-admin-bus-apis.js"
   },
   "keywords": [
     "bus-pool",
@@ -28,6 +33,8 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^6.10.1",
     "mysql2": "^3.14.0",
     "sequelize": "^6.37.7"
   },

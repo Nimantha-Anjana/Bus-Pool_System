@@ -48,6 +48,25 @@ const environment = {
   },
 
   timezone: process.env.APP_TIMEZONE || "Asia/Colombo",
+
+  // Public base URL of this API. Used to build the links inside assignment e-mails.
+  apiPublicUrl: (
+    process.env.API_PUBLIC_URL ||
+    `http://localhost:${Number(process.env.PORT) || 5000}`
+  ).replace(/\/+$/, ""),
+
+  // How long an e-mailed accept/reject link stays valid
+  assignmentTokenExpiresHours:
+    Number(process.env.ASSIGNMENT_TOKEN_EXPIRES_HOURS) || 48,
+
+  email: {
+    host: process.env.SMTP_HOST || "",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === "true",
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.EMAIL_FROM || "Bus Pool <no-reply@buspool.local>",
+  },
 };
 
 module.exports = environment;
