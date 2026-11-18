@@ -1,6 +1,6 @@
 const { sequelize } = require("../config/database");
 const { Bus, BusImage } = require("../models");
-const { removeFile } = require("../middleware/upload.middleware");
+const { removeFile, hasValidImageSignature } = require("../middleware/upload.middleware");
 const { parseId, sendError } = require("../utils/validators");
 
 const MAX_IMAGES_PER_BUS = 10;
@@ -62,6 +62,14 @@ const uploadBusImages = async (req, res, next) => {
   try {
     if (files.length === 0) {
       return sendError(res, 400, 'No image uploaded. Send files in the "images" field.');
+    }
+
+    // The declared MIME type can be faked: check the real file content
+    for (const file of files) {
+      if (!(await hasValidImageSignature(file.filename, file.mimetype))) {
+        await discardUploads();
+        return sendError(res, 400, "One of the files is not a real JPG, PNG or WEBP image.");
+      }
     }
 
     const bus = await Bus.findByPk(parseId(req.params.id));

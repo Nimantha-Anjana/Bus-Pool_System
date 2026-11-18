@@ -39,6 +39,7 @@ const {
 const { uploadBusImages } = require("../middleware/upload.middleware");
 
 const { auditAdminRequests } = require("../middleware/activity.middleware");
+const { validateBodyTypes } = require("../middleware/body-types.middleware");
 
 const {
   getAllAssignments,
@@ -92,6 +93,9 @@ const {
 // All routes below require Admin authentication
 router.use(authenticate);
 router.use(authorize("Admin"));
+
+// Text fields must really be text (otherwise 400 instead of a crash)
+router.use(validateBodyTypes);
 
 // Every successful admin change is written to the activity log
 router.use(auditAdminRequests);

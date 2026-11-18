@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
 const { Bus, BusOwner, BusImage, BusFacility, TourAssignment } = require("../models");
 const { removeFile } = require("../middleware/upload.middleware");
+const { getPagination, loadPage } = require("../utils/pagination");
 const {
   isNonEmptyString,
   parseId,
@@ -143,6 +144,25 @@ const getAllBuses = async (req, res, next) => {
         { busName: { [Op.like]: term } },
         { busType: { [Op.like]: term } },
       ];
+    }
+
+    // Optional ?page=&limit= (without them every bus is returned, as before)
+    const paging = getPagination(req.query);
+
+    if (paging) {
+      const { rows, meta } = await loadPage(Bus, {
+        where,
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        fullInclude: BUS_INCLUDES,
+        paging,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Buses retrieved successfully.",
+        data: rows.map(serializeBus),
+        pagination: meta,
+      });
     }
 
     const buses = await Bus.findAll({

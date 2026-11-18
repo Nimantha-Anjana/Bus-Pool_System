@@ -11,10 +11,12 @@ const {
   rejectAssignment,
 } = require("../controllers/driver-assignment.controller");
 const { saveLocation } = require("../controllers/gps.controller");
+const { validateBodyTypes } = require("../middleware/body-types.middleware");
 
 // All routes below require Driver authentication
 router.use(authenticate);
 router.use(authorize("Driver"));
+router.use(validateBodyTypes);
 
 // GET /api/driver/dashboard
 router.get("/dashboard", (req, res) => {

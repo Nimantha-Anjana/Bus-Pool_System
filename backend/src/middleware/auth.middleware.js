@@ -1,6 +1,7 @@
 
 const { User, Role, Driver } = require("../models");
 const { verifyAccessToken } = require("../utils/token.utils");
+const { getToday } = require("../utils/date.utils");
 
 const authenticate = async (req, res, next) => {
   try {
@@ -76,12 +77,7 @@ const authenticate = async (req, res, next) => {
     }
 
     if (user.role.name === "Driver") {
-      const today = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Colombo",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
+      const today = getToday();
 
       if (
         !user.driver ||
@@ -107,10 +103,15 @@ const authenticate = async (req, res, next) => {
 
     next();
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired access token.",
-    });
+    // Only token problems are the caller's fault (401). A database outage etc. must surface as 5xx.
+    if (["JsonWebTokenError", "TokenExpiredError", "NotBeforeError"].includes(error.name)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired access token.",
+      });
+    }
+
+    return next(error);
   }
 };
 
