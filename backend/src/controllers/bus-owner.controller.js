@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const { BusOwner, TourAssignment } = require("../models");
+const { getPagination, buildMeta } = require("../utils/pagination");
 const {
   isNonEmptyString,
   isValidEmail,
@@ -97,6 +98,25 @@ const getAllBusOwners = async (req, res, next) => {
       ];
     }
 
+    // Optional ?page=&limit= (without them every owner is returned, as before)
+    const paging = getPagination(req.query);
+
+    if (paging) {
+      const { rows, count } = await BusOwner.findAndCountAll({
+        where,
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        limit: paging.limit,
+        offset: paging.offset,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Bus owners retrieved successfully.",
+        data: rows,
+        pagination: buildMeta(paging, count),
+      });
+    }
+
     const owners = await BusOwner.findAll({ where, order: [["createdAt", "DESC"]] });
 
     return res.status(200).json({
@@ -189,6 +209,19 @@ const updateBusOwner = async (req, res, next) => {
 
     const duplicate = await findDuplicate(updates, owner.id);
     if (duplicate) return sendError(res, 409, duplicate);
+
+    // An owner whose buses are on pending/confirmed tours cannot be switched off underneath them
+    if (updates.status === "inactive" && owner.status !== "inactive") {
+      const activeAssignments = await TourAssignment.count({
+        where: { ownerId: owner.id, assignmentStatus: { [Op.in]: ["pending", "confirmed"] } },
+      });
+      if (activeAssignments > 0)
+        return sendError(
+          res,
+          409,
+          "Cannot deactivate this bus owner because pending or confirmed tour assignments exist."
+        );
+    }
 
     await owner.update(updates);
 

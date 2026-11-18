@@ -58,6 +58,24 @@ const uploadBusImages = (req, res, next) => {
   });
 };
 
+// Verify the real file content (client-supplied MIME types can be faked)
+const MAGIC = {
+  "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  "image/png": (b) => b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  "image/webp": (b) => b.slice(0, 4).toString() === "RIFF" && b.slice(8, 12).toString() === "WEBP",
+};
+
+const hasValidImageSignature = async (fileName, mimeType) => {
+  const handle = await fs.promises.open(path.join(BUS_IMAGE_DIR, path.basename(fileName)), "r");
+  try {
+    const buffer = Buffer.alloc(12);
+    await handle.read(buffer, 0, 12, 0);
+    return Boolean(MAGIC[mimeType] && MAGIC[mimeType](buffer));
+  } finally {
+    await handle.close();
+  }
+};
+
 const removeFile = async (fileName) => {
   if (!fileName) return;
   try {
@@ -68,4 +86,4 @@ const removeFile = async (fileName) => {
   }
 };
 
-module.exports = { uploadBusImages, removeFile, BUS_IMAGE_DIR };
+module.exports = { uploadBusImages, removeFile, hasValidImageSignature, BUS_IMAGE_DIR };

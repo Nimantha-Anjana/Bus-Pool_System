@@ -10,6 +10,7 @@ const { sequelize } = require("../config/database");
 const environment = require("../config/environment");
 const bcrypt = require("bcryptjs");
 const { logActivity } = require("../services/activity.service");
+const { isStrongPassword } = require("../utils/validators");
 
 const {
   generateAccessToken,
@@ -20,6 +21,9 @@ const {
 } = require("../utils/token.utils");
 
 const REFRESH_COOKIE_NAME = "bus_pool_refresh";
+
+// Hash of a random string, only used to equalise login timing for unknown e-mails
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("not-a-real-password", 12);
 
 const cookieOptions = () => ({
   httpOnly: true,
@@ -147,6 +151,9 @@ const login = async (req, res, next) => {
     });
 
     if (!user) {
+      // Spend the same time as a real check so response time does not reveal which e-mails exist
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+
       return res.status(401).json({
         success: false,
         message: "Invalid email or password.",
@@ -478,13 +485,11 @@ const changePassword = async (req, res, next) => {
       });
     }
 
-    if (
-      newPassword.length < 8 ||
-      newPassword.length > 72
-    ) {
+    if (!isStrongPassword(newPassword)) {
       return res.status(400).json({
         success: false,
-        message: "New password must be between 8 and 72 characters.",
+        message:
+          "New password must be 8-72 characters and contain at least one letter and one number.",
       });
     }
 

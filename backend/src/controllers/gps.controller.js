@@ -11,7 +11,7 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const optionalNumber = (value, { min, max, label }) => {
   if (value === undefined || value === null || value === "") return { value: null };
-  const number = Number(value);
+  const number = typeof value === "boolean" ? NaN : Number(value);
   if (!Number.isFinite(number) || number < min || number > max)
     return { error: `${label} must be a number between ${min} and ${max}.` };
   return { value: number };
@@ -22,11 +22,16 @@ const parsePoint = (raw, index, now) => {
   const label = `Point ${index + 1}`;
   if (!raw || typeof raw !== "object") return { error: `${label} must be an object.` };
 
+  // null / "" / booleans must NOT be silently turned into 0 by Number()
+  const isNumeric = (value) =>
+    (typeof value === "number" && Number.isFinite(value)) ||
+    (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)));
+
   const latitude = Number(raw.latitude);
   const longitude = Number(raw.longitude);
-  if (raw.latitude === undefined || !Number.isFinite(latitude) || latitude < -90 || latitude > 90)
+  if (!isNumeric(raw.latitude) || latitude < -90 || latitude > 90)
     return { error: `${label}: latitude must be a number between -90 and 90.` };
-  if (raw.longitude === undefined || !Number.isFinite(longitude) || longitude < -180 || longitude > 180)
+  if (!isNumeric(raw.longitude) || longitude < -180 || longitude > 180)
     return { error: `${label}: longitude must be a number between -180 and 180.` };
 
   const accuracy = optionalNumber(raw.accuracy, { min: 0, max: 100000, label: `${label}: accuracy` });

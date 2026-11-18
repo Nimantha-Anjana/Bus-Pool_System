@@ -34,7 +34,9 @@ const addDays = (dateOnly, days) => {
 };
 
 // ISO date-time string -> Date, or null when missing/invalid
+// (a Date that is already valid is accepted too, e.g. a value read back from the database)
 const parseDateTime = (value) => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;

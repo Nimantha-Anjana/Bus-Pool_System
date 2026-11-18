@@ -10,6 +10,7 @@ const {
   RefreshToken,
 } = require("../models");
 const { removeDriverFile } = require("../middleware/driver-upload.middleware");
+const { getPagination, loadPage } = require("../utils/pagination");
 const { getToday, isValidDateOnly, addDays } = require("../utils/date.utils");
 const {
   isNonEmptyString,
@@ -155,6 +156,27 @@ const getAllDrivers = async (req, res, next) => {
         { "$user.email$": { [Op.like]: term } },
         { "$user.phone$": { [Op.like]: term } },
       ];
+    }
+
+    // Optional ?page=&limit= (without them every driver is returned, as before)
+    const paging = getPagination(req.query);
+
+    if (paging) {
+      // The search touches the user table, so the id query joins it (belongsTo only: safe with LIMIT)
+      const { rows, meta } = await loadPage(Driver, {
+        where,
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        idInclude: [{ model: User, as: "user", attributes: [] }],
+        fullInclude: DRIVER_INCLUDES,
+        paging,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Drivers retrieved successfully.",
+        data: rows.map(serializeDriver),
+        pagination: meta,
+      });
     }
 
     const drivers = await Driver.findAll({

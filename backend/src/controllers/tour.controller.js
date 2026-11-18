@@ -1,10 +1,11 @@
 const crypto = require("crypto");
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
-const { Tour, TourStop, TourAssignment, Bus, User } = require("../models");
+const { Tour, TourStop, TourAssignment, AssignmentActionToken, Bus, User } = require("../models");
 const { parseDateTime } = require("../utils/date.utils");
 const { isNonEmptyString, parseId, sendError } = require("../utils/validators");
 const { validateStops, mapStopRows } = require("./tour-stop.controller");
+const { getPagination, loadPage } = require("../utils/pagination");
 
 const TOUR_TYPES = ["local", "foreign"];
 const ACTIVE_ASSIGNMENT_STATUSES = ["pending", "confirmed"];
@@ -149,6 +150,36 @@ const getAllTours = async (req, res, next) => {
         { startLocation: { [Op.like]: term } },
         { destination: { [Op.like]: term } },
       ];
+    }
+
+    // Optional ?page=&limit= (without them every tour is returned, as before)
+    const paging = getPagination(req.query);
+
+    if (paging) {
+      // pending / scheduled are derived from the assignments: express them in SQL so the page size stays exact
+      if (status === "pending" || status === "scheduled") {
+        const confirmedExists =
+          "EXISTS (SELECT 1 FROM tour_assignments ta WHERE ta.tour_id = `Tour`.`id` AND ta.assignment_status = 'confirmed')";
+        where[Op.and] = [
+          ...(where[Op.and] || []),
+          sequelize.literal(status === "scheduled" ? confirmedExists : `NOT ${confirmedExists}`),
+        ];
+      }
+
+      const { rows, meta } = await loadPage(Tour, {
+        where,
+        order: [["startAt", "DESC"], ["id", "DESC"]],
+        fullInclude: TOUR_INCLUDES,
+        fullOrder: [["startAt", "DESC"], ["id", "DESC"], ...STOP_ORDER],
+        paging,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Tours retrieved successfully.",
+        data: rows.map(serializeTour),
+        pagination: meta,
+      });
     }
 
     const tours = await Tour.findAll({
@@ -389,7 +420,8 @@ const updateTourStatus = async (req, res, next) => {
     if (!["ongoing", "completed", "cancelled"].includes(status))
       return fail(400, "Status must be one of: ongoing, completed, cancelled.");
 
-    const tour = await Tour.findByPk(id, { transaction });
+    // Lock the row so two admins cannot change the same tour's status at the same time
+    const tour = await Tour.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
     if (!tour) return fail(404, "Tour not found.");
 
     if (!TRANSITIONS[tour.status].includes(status))
@@ -403,14 +435,42 @@ const updateTourStatus = async (req, res, next) => {
     let warning = null;
 
     if (status === "ongoing") {
-      if (!affected.some((a) => a.assignmentStatus === "confirmed"))
-        warning = "This tour was started without a confirmed bus assignment.";
+      const confirmed = affected.filter((a) => a.assignmentStatus === "confirmed");
+      if (!confirmed.length) warning = "This tour was started without a confirmed bus assignment.";
+
+      // Remember when each confirmed assignment actually started
+      for (const assignment of confirmed) {
+        await assignment.update({ startedAt: new Date() }, { transaction });
+      }
     } else {
       // completed: confirmed assignments finish, pending ones lapse. cancelled: everything is cancelled.
+      const now = new Date();
       for (const assignment of affected) {
         const finalStatus =
           status === "completed" && assignment.assignmentStatus === "confirmed" ? "completed" : "cancelled";
-        await assignment.update({ assignmentStatus: next }, { transaction });
+
+        await assignment.update(
+          {
+            assignmentStatus: finalStatus,
+            ...(finalStatus === "completed" ? { completedAt: now } : { cancelledAt: now }),
+          },
+          { transaction }
+        );
+      }
+
+      // Pending e-mail links of lapsed/cancelled assignments must stop working
+      if (affected.length) {
+        await AssignmentActionToken.update(
+          { revokedAt: now },
+          {
+            where: {
+              assignmentId: { [Op.in]: affected.map((a) => a.id) },
+              usedAt: null,
+              revokedAt: null,
+            },
+            transaction,
+          }
+        );
       }
 
       // Release buses that are no longer needed by any other active assignment

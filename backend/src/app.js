@@ -20,6 +20,13 @@ const errorHandler = require("./middleware/error.middleware");
 
 const app = express();
 
+// Behind a reverse proxy / load balancer (Nginx, Render, ...) set TRUST_PROXY=1 so that req.ip is the
+// real client address (needed by the rate limiters and the activity log).
+if (process.env.TRUST_PROXY) {
+  const value = process.env.TRUST_PROXY;
+  app.set("trust proxy", /^\d+$/.test(value) ? Number(value) : value === "true" ? true : value);
+}
+
 // Security headers
 app.use(helmet());
 
@@ -32,14 +39,17 @@ app.use(
   })
 );
 
-// Request logging
+// Request logging (readable in development, standard access-log format elsewhere; silent in tests)
 if (environment.nodeEnv === "development") {
   app.use(morgan("dev"));
+} else if (environment.nodeEnv !== "test") {
+  app.use(morgan("combined"));
 }
 
 // Request body parsing
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// Every JSON payload in this API is small (uploads use multipart/form-data), so keep the limit low.
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // Cookie parsing
 app.use(cookieParser());
