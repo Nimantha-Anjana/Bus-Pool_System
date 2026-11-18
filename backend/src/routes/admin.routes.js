@@ -51,8 +51,9 @@ const {
   deleteAssignment,
 } = require("../controllers/assignment.controller");
 
-const { getBusLocation, getBusGpsHistory } = require("../controllers/gps.controller");
+const { getBusLocation, getBusGpsHistory, getLiveBuses } = require("../controllers/gps.controller");
 const { getActivityLogs } = require("../controllers/activity-log.controller");
+const { getEmailLogs } = require("../controllers/email-log.controller");
 
 const {
   getAllDrivers,
@@ -222,11 +223,13 @@ router.post("/assignments/:id/resend", resendAssignmentEmails);
 
 router.get("/buses/:id/location", getBusLocation);
 router.get("/buses/:id/gps-history", getBusGpsHistory);
+router.get("/gps/live", getLiveBuses);
 
 // =====================================================
 // ACTIVITY LOGS
 // =====================================================
 
 router.get("/activity-logs", getActivityLogs);
+router.get("/email-logs", getEmailLogs);
 
 module.exports = router;

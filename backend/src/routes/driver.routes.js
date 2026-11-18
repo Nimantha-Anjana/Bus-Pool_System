@@ -10,7 +10,7 @@ const {
   acceptAssignment,
   rejectAssignment,
 } = require("../controllers/driver-assignment.controller");
-const { saveLocation } = require("../controllers/gps.controller");
+const { saveLocation, getGpsConfig } = require("../controllers/gps.controller");
 const { validateBodyTypes } = require("../middleware/body-types.middleware");
 
 // All routes below require Driver authentication
@@ -49,6 +49,7 @@ router.post("/assignments/:id/accept", acceptAssignment);
 router.post("/assignments/:id/reject", rejectAssignment);
 
 // GPS tracking (confirmed assignment + ongoing tour only)
+router.get("/gps/config", getGpsConfig);
 router.post("/gps", saveLocation);
 
 module.exports = router;

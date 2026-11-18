@@ -2,7 +2,16 @@ const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
 const { Bus, BusOwner, BusImage, BusFacility, TourAssignment } = require("../models");
 const { removeFile } = require("../middleware/upload.middleware");
-const { getPagination, loadPage } = require("../utils/pagination");
+const { getPagination, loadPage, getSort } = require("../utils/pagination");
+
+const SORTABLE = {
+  registrationNumber: "registrationNumber",
+  busName: "busName",
+  busType: "busType",
+  seatingCapacity: "seatingCapacity",
+  status: "status",
+  createdAt: "createdAt",
+};
 const {
   isNonEmptyString,
   parseId,
@@ -148,11 +157,12 @@ const getAllBuses = async (req, res, next) => {
 
     // Optional ?page=&limit= (without them every bus is returned, as before)
     const paging = getPagination(req.query);
+    const order = getSort(req.query, SORTABLE, [["createdAt", "DESC"]]);
 
     if (paging) {
       const { rows, meta } = await loadPage(Bus, {
         where,
-        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        order,
         fullInclude: BUS_INCLUDES,
         paging,
       });
@@ -168,7 +178,7 @@ const getAllBuses = async (req, res, next) => {
     const buses = await Bus.findAll({
       where,
       include: BUS_INCLUDES,
-      order: [["createdAt", "DESC"]],
+      order,
     });
 
     return res.status(200).json({

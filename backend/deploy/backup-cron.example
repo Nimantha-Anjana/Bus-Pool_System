@@ -1,0 +1,6 @@
+# crontab -e   (as the user that runs the API; mysqldump must be installed)
+# 02:30 every night: database backup (old backups are deleted after BACKUP_KEEP_DAYS)
+30 2 * * * cd /srv/bus-pool/backend && /usr/bin/npm run db:backup >> /var/log/bus-pool-backup.log 2>&1
+# 02:45: copy the uploaded files too (bus images + private driver documents) next to the database backups
+45 2 * * * rsync -a /srv/bus-pool/backend/uploads/ /var/backups/bus-pool/files/uploads/ && rsync -a /srv/bus-pool/backend/private_uploads/ /var/backups/bus-pool/files/private_uploads/ >> /var/log/bus-pool-backup.log 2>&1
+# Then copy /var/backups/bus-pool off the server (another machine or cloud storage): a backup on the same disk is not a backup.

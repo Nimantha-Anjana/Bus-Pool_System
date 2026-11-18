@@ -1,27 +1,12 @@
 const app = require("./src/app");
 const environment = require("./src/config/environment");
 const { connectDatabase } = require("./src/config/database");
+const { startJobs } = require("./src/services/jobs.service");
+const { reportError } = require("./src/utils/error-reporter");
 
 
 require("./src/models");
 
-
-// Delete refresh tokens that expired or were revoked more than a day ago (the table only ever grows otherwise)
-const purgeOldRefreshTokens = async () => {
-  try {
-    const { Op } = require("sequelize");
-    const { RefreshToken } = require("./src/models");
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const removed = await RefreshToken.destroy({
-      where: { [Op.or]: [{ expiresAt: { [Op.lt]: cutoff } }, { revokedAt: { [Op.lt]: cutoff } }] },
-    });
-
-    if (removed) console.log(`Purged ${removed} old refresh token(s).`);
-  } catch (error) {
-    console.error("Refresh token cleanup failed:", error.message);
-  }
-};
 
 const startServer = async () => {
   try {
@@ -38,9 +23,8 @@ const startServer = async () => {
       console.log("----------------------------------------");
     });
 
-    // Clean once at start-up, then every 6 hours (unref: never keeps the process alive)
-    purgeOldRefreshTokens();
-    setInterval(purgeOldRefreshTokens, 6 * 60 * 60 * 1000).unref();
+    // Reminders, e-mail retry, expired-link alerts and clean-up
+    startJobs();
 
     const shutdown = (signal) => {
       console.log(`${signal} received. Shutting down server...`);
@@ -73,11 +57,14 @@ const startServer = async () => {
 // Log (instead of silently dying on) errors nobody caught
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection:", reason);
+  reportError(reason, "unhandledRejection");
 });
 
 process.on("uncaughtException", (error) => {
   console.error("Uncaught exception:", error);
-  process.exit(1);
+  reportError(error, "uncaughtException");
+  // give the webhook a moment to leave before the process exits
+  setTimeout(() => process.exit(1), 500);
 });
 
 startServer();

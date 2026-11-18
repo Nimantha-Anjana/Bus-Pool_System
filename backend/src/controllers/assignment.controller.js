@@ -14,7 +14,14 @@ const {
 const { withTransaction, HttpError } = require("../utils/transaction.util");
 const { parseDateTime, toDateOnly } = require("../utils/date.utils");
 const { parseId, sendError } = require("../utils/validators");
-const { getPagination, loadPage } = require("../utils/pagination");
+const { getPagination, loadPage, getSort } = require("../utils/pagination");
+
+const SORTABLE = {
+  assignedStartAt: "assignedStartAt",
+  assignedEndAt: "assignedEndAt",
+  assignmentStatus: "assignmentStatus",
+  createdAt: "createdAt",
+};
 const { createNotification } = require("../services/notification.service");
 const { sendAssignmentEmails, getParties } = require("../services/email.service");
 const {
@@ -79,11 +86,12 @@ const getAllAssignments = async (req, res, next) => {
 
     // Optional ?page=&limit= (without them every assignment is returned, as before)
     const paging = getPagination(req.query);
+    const order = getSort(req.query, SORTABLE, [["assignedStartAt", "DESC"]]);
 
     if (paging) {
       const { rows, meta } = await loadPage(TourAssignment, {
         where,
-        order: [["assignedStartAt", "DESC"], ["id", "DESC"]],
+        order,
         fullInclude: DETAIL_INCLUDES,
         paging,
       });
@@ -99,7 +107,7 @@ const getAllAssignments = async (req, res, next) => {
     const assignments = await TourAssignment.findAll({
       where,
       include: DETAIL_INCLUDES,
-      order: [["assignedStartAt", "DESC"]],
+      order,
     });
 
     return res.status(200).json({

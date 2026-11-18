@@ -15,6 +15,8 @@ router.get("/", async (req, res, next) => {
         database: "connected",
         environment: process.env.NODE_ENV || "development",
         timestamp: new Date().toISOString(),
+        uptimeSeconds: Math.round(process.uptime()),
+        memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
       },
     });
   } catch (error) {

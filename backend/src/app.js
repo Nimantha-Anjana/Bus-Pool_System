@@ -33,11 +33,29 @@ app.use(helmet());
 // Frontend connection
 app.use(
   cors({
-    origin: environment.frontendUrl,
+    // Exact-match allow-list (never "*": the refresh cookie needs credentials)
+    origin: (origin, callback) => {
+      // no Origin header = same-origin / curl / mobile app / e-mail link: not a browser cross-site call
+      if (!origin || environment.frontendUrls.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 600,
   })
 );
+
+// Log slow requests (threshold: SLOW_REQUEST_MS, default 1000 ms) so performance problems show up in the logs
+app.use((req, res, next) => {
+  const started = process.hrtime.bigint();
+  res.on("finish", () => {
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    if (ms >= environment.slowRequestMs)
+      console.warn(`SLOW REQUEST ${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(0)}ms`);
+  });
+  next();
+});
 
 // Request logging (readable in development, standard access-log format elsewhere; silent in tests)
 if (environment.nodeEnv === "development") {
@@ -73,6 +91,11 @@ app.get("/", (req, res) => {
 });
 
 // API routes
+// Interactive API documentation (Swagger UI) - disabled in production unless ENABLE_API_DOCS=true
+if (environment.enableApiDocs) {
+  app.use("/api/docs", require("./routes/docs.routes"));
+}
+
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);

@@ -36,12 +36,23 @@ buses, drivers, tours; overlap prevention with row locks; single-use hashed e-ma
 use; GPS only for the driver's own confirmed assignment on an ongoing tour; driver NIC/licence files kept outside the public folder;
 activity log middleware does not log request bodies; all queries use Sequelize parameters (no raw string SQL with user input).
 
+## Phase 2-10 additions
+
+Database: numbered migrations (`schema_migrations`), 8 indexes, bus-status reconcile, integrity checker, backup/restore scripts.
+API: sorting + pagination, OpenAPI spec + Swagger UI, e-mail log endpoint. Security: production config validation, CORS allow-list,
+cookie SameSite/domain options, rate limits. Business logic: 48 h reminders, retry of failed e-mails, expired-link flagging.
+GPS: min-interval throttle, live buses, Google Maps links, retention. Performance: indexes, slow-request log, health metrics.
+Tests: 19 unit tests (stubbed, no DB). Deployment: pm2, Nginx, backup cron, smoke test, `docs/DEPLOYMENT.md`.
+
+**Not verified here (no database/network):** real server start, migrations on a live DB, paged queries, live-GPS SQL, background jobs,
+`npm run test:e2e`, Postman, real e-mail delivery, HTTPS/deploy. Run these before release.
+
 ## Still recommended (not changed)
 
 1. `backend/.env` was inside the zip with real-looking secrets and a DB password. It is **not** included in the fixed zip; rotate those secrets if the original zip was shared.
 2. The root README used to show the admin password; use a strong one and change it after first login. `seed-sample-data.js` creates a demo driver with a fixed password: development only.
-3. E-mails are sent inside the request (up to ~2 x 10 s per recipient if SMTP hangs). A queue would be better for production.
+3. E-mails are still sent inside the request (failed ones are retried by a job) (up to ~2 x 10 s per recipient if SMTP hangs). A queue would be better for production.
 4. Refresh-token reuse detection (revoke the whole session family when an already used token is presented) was left out on purpose: parallel refresh calls from the frontend could log users out. Add it once the frontend serialises refreshes.
-5. GPS table grows without limit; add a retention job (for example delete points older than 90 days after a tour completes).
-6. There are no automated tests; the `scripts/test-*.js` API scripts are the only checks. A few Jest/Supertest tests for auth and assignments would protect these fixes.
+5. GPS retention is handled by the clean-up job (`GPS_RETENTION_DAYS`); check the value fits your needs.
+6. Unit tests exist but integration tests against a real DB are still missing beyond the `scripts/test-*.js` API scripts.
 7. Overlap prevention is enforced by the application (row locks); the database itself has no constraint for it.

@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const { GpsLocation, TourAssignment, Tour, Driver, User, Bus } = require("../models");
 const { parseDateTime } = require("../utils/date.utils");
 const { parseId, sendError } = require("../utils/validators");
+const environment = require("../config/environment");
 
 const MAX_POINTS_PER_REQUEST = 100;
 const MAX_HISTORY_LIMIT = 5000;
@@ -72,7 +73,37 @@ const toPoint = (row) => ({
   heading: row.heading === null ? null : Number(row.heading),
   recordedAt: row.recordedAt,
   receivedAt: row.receivedAt,
+  googleMapsUrl: `https://www.google.com/maps?q=${Number(row.latitude)},${Number(row.longitude)}`,
 });
+
+// Find the one assignment a driver may currently send GPS for (confirmed + tour ongoing)
+const findSendableAssignments = (driverId, assignmentId) =>
+  TourAssignment.findAll({
+    where: { driverId, assignmentStatus: "confirmed", ...(assignmentId ? { id: assignmentId } : {}) },
+    include: [{ model: Tour, as: "tour", where: { status: "ongoing" }, attributes: ["id", "tourCode"] }],
+  });
+
+// GET /api/driver/gps/config
+// Lets the driver app decide whether to start / stop tracking and how often to send.
+const getGpsConfig = async (req, res, next) => {
+  try {
+    const eligible = await findSendableAssignments(req.user.driverId);
+
+    return res.status(200).json({
+      success: true,
+      message: "GPS configuration retrieved successfully.",
+      data: {
+        canSend: eligible.length > 0,
+        assignments: eligible.map((a) => ({ assignmentId: a.id, tourCode: a.tour.tourCode })),
+        minIntervalSeconds: environment.gps.minIntervalSeconds,
+        recommendedIntervalSeconds: environment.gps.recommendedIntervalSeconds,
+        maxPointsPerRequest: MAX_POINTS_PER_REQUEST,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // POST /api/driver/gps
 //   one point:  { assignmentId?, latitude, longitude, accuracy?, speed?, heading?, recordedAt? }
@@ -99,14 +130,7 @@ const saveLocation = async (req, res, next) => {
     const requestedId = body.assignmentId !== undefined ? parseId(body.assignmentId) : null;
     if (body.assignmentId !== undefined && !requestedId) return sendError(res, 400, "Invalid assignmentId.");
 
-    const eligible = await TourAssignment.findAll({
-      where: {
-        driverId: req.user.driverId,
-        assignmentStatus: "confirmed",
-        ...(requestedId ? { id: requestedId } : {}),
-      },
-      include: [{ model: Tour, as: "tour", where: { status: "ongoing" }, attributes: ["id", "tourCode"] }],
-    });
+    const eligible = await findSendableAssignments(req.user.driverId, requestedId);
 
     if (!eligible.length) {
       if (requestedId) {
@@ -124,12 +148,39 @@ const saveLocation = async (req, res, next) => {
 
     const assignment = eligible[0];
 
+    // Update-frequency control: a single live point must not arrive faster than the minimum interval
+    // (batches of buffered offline points are exempt).
+    if (rows.length === 1) {
+      const last = await GpsLocation.findOne({
+        where: { assignmentId: assignment.id },
+        order: [["receivedAt", "DESC"], ["id", "DESC"]],
+        attributes: ["receivedAt"],
+      });
+
+      if (last) {
+        const waitMs = environment.gps.minIntervalSeconds * 1000 - (now.getTime() - new Date(last.receivedAt).getTime());
+        if (waitMs > 0) {
+          const retryAfterSeconds = Math.ceil(waitMs / 1000);
+          res.setHeader("Retry-After", retryAfterSeconds);
+          return res.status(429).json({
+            success: false,
+            message: `Location updates are too frequent. Send at most one every ${environment.gps.minIntervalSeconds} seconds.`,
+            data: { retryAfterSeconds },
+          });
+        }
+      }
+    }
+
     await GpsLocation.bulkCreate(rows.map((row) => ({ ...row, assignmentId: assignment.id })));
 
     return res.status(201).json({
       success: true,
       message: `${rows.length} location point(s) saved.`,
-      data: { assignmentId: assignment.id, saved: rows.length },
+      data: {
+        assignmentId: assignment.id,
+        saved: rows.length,
+        recommendedIntervalSeconds: environment.gps.recommendedIntervalSeconds,
+      },
     });
   } catch (error) {
     next(error);
@@ -258,4 +309,63 @@ const getBusGpsHistory = async (req, res, next) => {
   }
 };
 
-module.exports = { saveLocation, getBusLocation, getBusGpsHistory };
+// GET /api/admin/gps/live  -> latest position of every bus that is on a tour right now (for the map)
+const getLiveBuses = async (req, res, next) => {
+  try {
+    const assignments = await TourAssignment.findAll({
+      where: { assignmentStatus: "confirmed" },
+      attributes: ["id", "busId"],
+      include: [
+        { model: Tour, as: "tour", where: { status: "ongoing" }, attributes: ["id", "tourCode", "tourName", "destination"] },
+        { model: Bus, as: "bus", attributes: ["id", "registrationNumber", "busName"] },
+        {
+          model: Driver,
+          as: "driver",
+          attributes: ["id"],
+          include: [{ model: User, as: "user", attributes: ["firstName", "lastName", "phone"] }],
+        },
+      ],
+    });
+
+    const latestByAssignment = new Map();
+
+    if (assignments.length) {
+      // One query for all buses (no N+1): the newest row per assignment
+      const rows = await GpsLocation.sequelize.query(
+        `SELECT g.id, g.assignment_id AS assignmentId, g.latitude, g.longitude, g.accuracy, g.speed, g.heading,
+                g.recorded_at AS recordedAt, g.received_at AS receivedAt
+         FROM gps_locations g
+         JOIN (SELECT assignment_id, MAX(id) AS max_id FROM gps_locations
+               WHERE assignment_id IN (:ids) GROUP BY assignment_id) latest ON latest.max_id = g.id`,
+        { replacements: { ids: assignments.map((a) => a.id) }, type: "SELECT" }
+      );
+      rows.forEach((row) => latestByAssignment.set(row.assignmentId, row));
+    }
+
+    const data = assignments.map((assignment) => {
+      const latest = latestByAssignment.get(assignment.id);
+      return {
+        assignmentId: assignment.id,
+        bus: assignment.bus,
+        tour: assignment.tour,
+        driver: {
+          id: assignment.driver.id,
+          name: `${assignment.driver.user.firstName} ${assignment.driver.user.lastName}`,
+          phone: assignment.driver.user.phone,
+        },
+        location: latest ? toPoint(latest) : null,
+        isLive: latest ? Date.now() - new Date(latest.receivedAt).getTime() <= LIVE_WINDOW_MS : false,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Live bus locations retrieved successfully.",
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { saveLocation, getGpsConfig, getBusLocation, getBusGpsHistory, getLiveBuses };

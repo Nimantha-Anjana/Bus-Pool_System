@@ -15,7 +15,15 @@
     "test:assignments": "node scripts/test-assignment-gps-notification-apis.js",
     "test:admin-driver-tour": "node scripts/test-admin-driver-tour-apis.js",
     "test:admin-bus": "node scripts/test-admin-bus-apis.js",
-    "db:migrate": "node scripts/migrate-schema.js"
+    "db:migrate": "node scripts/migrate.js",
+    "db:status": "node scripts/migrate.js --status",
+    "db:check": "node scripts/check-integrity.js",
+    "db:backup": "node scripts/backup-db.js",
+    "db:restore": "node scripts/restore-db.js",
+    "test": "node tests/run.js",
+    "test:e2e": "node scripts/test-admin-bus-apis.js && node scripts/test-admin-driver-tour-apis.js && node scripts/test-assignment-gps-notification-apis.js",
+    "docs:generate": "node scripts/generate-api-docs.js",
+    "smoke": "node scripts/smoke-test.js"
   },
   "keywords": [
     "bus-pool",

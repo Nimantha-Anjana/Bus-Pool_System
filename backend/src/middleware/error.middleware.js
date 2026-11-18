@@ -1,3 +1,5 @@
+const { reportError } = require("../utils/error-reporter");
+
 // Translate well-known library errors into proper HTTP status codes
 // (so a duplicate row is a 409 and a bad JSON body is a 400 instead of a generic 500).
 const resolveStatus = (error) => {
@@ -54,6 +56,7 @@ const errorHandler = (error, req, res, next) => {
   // Always log server-side failures (also in production, otherwise nobody ever sees them)
   if (statusCode >= 500) {
     console.error(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ->`, error);
+    reportError(error, `${req.method} ${req.originalUrl}`);
   } else if (!isProduction) {
     console.warn(`${req.method} ${req.originalUrl} -> ${statusCode} ${message}`);
   }
