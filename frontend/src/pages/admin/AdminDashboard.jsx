@@ -1,45 +1,55 @@
+import { Link, useNavigate } from "react-router-dom";
 import {
-  BusFront,
-  Users,
-  UserRound,
-  ClipboardList,
-  ArrowUpRight,
-  Clock3,
-  MapPin,
+  Activity, BusFront, CalendarClock, CircleCheck, ClipboardList, Clock3, Link2, UserRound,
 } from "lucide-react";
+import { Alert, DataTable, EmptyState, StatusBadge } from "../../components/admin-ui/ui";
+import { useAsync } from "../../components/admin-ui/hooks";
+import { formatDate, timeAgo } from "../../components/admin-ui/format";
+import { getDashboard, getRecentActivities, getUpcomingTours } from "../../services/admin/dashboardService";
+import { CHART_COLORS, ColumnChart, DonutChart, HorizontalBars } from "./dashboard/charts";
 
-const stats = [
-  {
-    title: "Total Buses",
-    value: "24",
-    note: "Registered buses",
-    icon: BusFront,
-    color: "blue",
-  },
-  {
-    title: "Total Drivers",
-    value: "18",
-    note: "Active drivers",
-    icon: Users,
-    color: "green",
-  },
-  {
-    title: "Total Tours",
-    value: "36",
-    note: "All registered tours",
-    icon: ClipboardList,
-    color: "purple",
-  },
-  {
-    title: "Bus Owners",
-    value: "12",
-    note: "Registered owners",
-    icon: UserRound,
-    color: "orange",
-  },
-];
+function StatCard({ title, value, note, icon: Icon, color, to, loading }) {
+  const body = (
+    <div className="stat-card bp-stat">
+      <div className="stat-card-top">
+        <div className={`stat-icon ${color}`}><Icon size={22} /></div>
+      </div>
+      <h3>{loading ? <span className="bp-skeleton" style={{ width: 54, height: 28 }} /> : value}</h3>
+      <h6>{title}</h6>
+      <p>{note}</p>
+    </div>
+  );
+  return to ? <Link to={to} className="bp-stat-link">{body}</Link> : body;
+}
+
+function CardHeading({ title, subtitle, action }) {
+  return (
+    <div className="card-heading">
+      <div><h5>{title}</h5><p>{subtitle}</p></div>
+      {action}
+    </div>
+  );
+}
+
+const activityTitle = (a) => a.description || a.action;
+const actorName = (a) => [a.user?.firstName, a.user?.lastName].filter(Boolean).join(" ") || "System";
 
 function AdminDashboard() {
+  const navigate = useNavigate();
+  const dashboard = useAsync(getDashboard, []);
+  const tours = useAsync(() => getUpcomingTours(5), []);
+  const activities = useAsync(() => getRecentActivities(6), []);
+
+  const d = dashboard.data;
+  const busy = dashboard.loading && !d;
+
+  const tourColumns = [
+    { key: "tourName", header: "Tour", render: (t) => (<div className="text-start"><strong>{t.tourName}</strong><small className="table-subtitle">{t.tourCode}</small></div>) },
+    { key: "destination", header: "Destination" },
+    { key: "startAt", header: "Start date", render: (t) => formatDate(t.startAt) },
+    { key: "status", header: "Status", render: (t) => <StatusBadge status={t.status} /> },
+  ];
+
   return (
     <div>
       <div className="page-heading">
@@ -48,134 +58,97 @@ function AdminDashboard() {
           <h2>Dashboard</h2>
           <p>Welcome back! Here is your bus pool system overview.</p>
         </div>
-
         <div className="date-label">
           <Clock3 size={16} />
-          System Overview
+          {new Date().toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
         </div>
       </div>
 
+      {dashboard.error && <Alert onRetry={dashboard.reload}>{dashboard.error}</Alert>}
+
       <div className="row g-4 mb-4">
-        {stats.map((item) => {
-          const Icon = item.icon;
+        <div className="col-12 col-sm-6 col-xl-4"><StatCard loading={busy} title="Total Buses" value={d?.summary.totalBuses} note="Registered buses" icon={BusFront} color="blue" to="/admin/buses" /></div>
+        <div className="col-12 col-sm-6 col-xl-4"><StatCard loading={busy} title="Available Buses" value={d?.summary.availableBuses} note="Ready for allocation" icon={CircleCheck} color="green" to="/admin/buses" /></div>
+        <div className="col-12 col-sm-6 col-xl-4"><StatCard loading={busy} title="Assigned Buses" value={d?.buses.assigned} note="On confirmed / pending tours" icon={Link2} color="purple" to="/admin/buses" /></div>
+        <div className="col-12 col-sm-6 col-xl-4"><StatCard loading={busy} title="Total Drivers" value={d?.summary.totalDrivers} note="Registered drivers" icon={UserRound} color="orange" to="/admin/drivers" /></div>
+        <div className="col-12 col-sm-6 col-xl-4"><StatCard loading={busy} title="Total Tours" value={d?.summary.totalTours} note="All registered tours" icon={ClipboardList} color="blue" to="/admin/tours" /></div>
+        <div className="col-12 col-sm-6 col-xl-4"><StatCard loading={busy} title="Upcoming Tours" value={d?.tours.planned} note="Planned, not started yet" icon={CalendarClock} color="green" to="/admin/tours" /></div>
+      </div>
 
-          return (
-            <div className="col-12 col-sm-6 col-xl-3" key={item.title}>
-              <div className="stat-card">
-                <div className="stat-card-top">
-                  <div className={`stat-icon ${item.color}`}>
-                    <Icon size={22} />
-                  </div>
-                  <ArrowUpRight size={18} className="stat-arrow" />
-                </div>
-
-                <h3>{item.value}</h3>
-                <h6>{item.title}</h6>
-                <p>{item.note}</p>
-              </div>
-            </div>
-          );
-        })}
+      {/* Statistics charts */}
+      <div className="row g-4 mb-4">
+        <div className="col-12 col-md-6 col-xl-4">
+          <div className="content-card h-100">
+            <CardHeading title="Bus Status" subtitle="Fleet by availability" />
+            {busy ? <span className="bp-skeleton" style={{ height: 140 }} /> : d && (
+              <DonutChart
+                centerLabel="Buses" centerValue={d.buses.total}
+                segments={[
+                  { label: "Available", value: d.buses.available, color: CHART_COLORS.green },
+                  { label: "Assigned", value: d.buses.assigned, color: CHART_COLORS.blue },
+                  { label: "Maintenance", value: d.buses.maintenance, color: CHART_COLORS.orange },
+                  { label: "Inactive", value: d.buses.inactive, color: CHART_COLORS.gray },
+                ]}
+              />
+            )}
+          </div>
+        </div>
+        <div className="col-12 col-md-6 col-xl-4">
+          <div className="content-card h-100">
+            <CardHeading title="Tours by Status" subtitle="All tours in the system" />
+            {busy ? <span className="bp-skeleton" style={{ height: 140 }} /> : d && (
+              <ColumnChart
+                items={[
+                  { label: "Planned", value: d.tours.planned, color: CHART_COLORS.orange },
+                  { label: "Ongoing", value: d.tours.ongoing, color: CHART_COLORS.blue },
+                  { label: "Completed", value: d.tours.completed, color: CHART_COLORS.green },
+                  { label: "Cancelled", value: d.tours.cancelled, color: CHART_COLORS.red },
+                ]}
+              />
+            )}
+          </div>
+        </div>
+        <div className="col-12 col-xl-4">
+          <div className="content-card h-100">
+            <CardHeading title="Top Owners" subtitle="Owners with the most buses" />
+            {busy ? <span className="bp-skeleton" style={{ height: 140 }} /> : d && (
+              d.topOwnersByBuses.length
+                ? <HorizontalBars items={d.topOwnersByBuses.map((o) => ({ label: o.ownerName, value: o.busCount }))} unit=" buses" />
+                : <EmptyState title="No data yet" />
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="row g-4">
-        <div className="col-12 col-xl-8">
-          <div className="content-card">
-            <div className="card-heading">
-              <div>
-                <h5>Recent Tours</h5>
-                <p>Latest tour activities</p>
-              </div>
-              <button className="text-action" type="button">
-                View all
-              </button>
-            </div>
-
-            <div className="table-responsive">
-              <table className="table custom-table align-middle">
-                <thead>
-                  <tr>
-                    <th>Tour Name</th>
-                    <th>Destination</th>
-                    <th>Date</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>
-                      <strong>Southern Tour</strong>
-                      <small className="table-subtitle">TR-001</small>
-                    </td>
-                    <td>Galle</td>
-                    <td>2026-11-05</td>
-                    <td><span className="status-badge planned">Planned</span></td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <strong>Hill Country Tour</strong>
-                      <small className="table-subtitle">TR-002</small>
-                    </td>
-                    <td>Nuwara Eliya</td>
-                    <td>2026-11-08</td>
-                    <td><span className="status-badge ongoing">Ongoing</span></td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <strong>City Tour</strong>
-                      <small className="table-subtitle">TR-003</small>
-                    </td>
-                    <td>Colombo</td>
-                    <td>2026-11-12</td>
-                    <td><span className="status-badge completed">Completed</span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+        <div className="col-12 col-xl-7">
+          <div className="content-card h-100">
+            <CardHeading title="Upcoming Tours" subtitle="Next planned tours" action={<button className="text-action" type="button" onClick={() => navigate("/admin/tours")}>View all</button>} />
+            {tours.error && <Alert onRetry={tours.reload}>{tours.error}</Alert>}
+            <DataTable
+              columns={tourColumns} rows={tours.data || []} loading={tours.loading && !tours.data} skeletonRows={3}
+              empty={!tours.error && <EmptyState title="No upcoming tours" text="Planned tours will show up here." />}
+            />
           </div>
         </div>
 
-        <div className="col-12 col-xl-4">
-          <div className="content-card activity-card">
-            <div className="card-heading">
-              <div>
-                <h5>Quick Overview</h5>
-                <p>System activity summary</p>
-              </div>
-            </div>
-
-            <div className="overview-item">
-              <div className="overview-icon blue">
-                <ClipboardList size={19} />
-              </div>
-              <div>
-                <strong>Pending Assignments</strong>
-                <small>Awaiting confirmation</small>
-              </div>
-              <span className="overview-number">05</span>
-            </div>
-
-            <div className="overview-item">
-              <div className="overview-icon green">
-                <BusFront size={19} />
-              </div>
-              <div>
-                <strong>Available Buses</strong>
-                <small>Ready for allocation</small>
-              </div>
-              <span className="overview-number">16</span>
-            </div>
-
-            <div className="overview-item">
-              <div className="overview-icon purple">
-                <MapPin size={19} />
-              </div>
-              <div>
-                <strong>Active Tracking</strong>
-                <small>Buses on active tours</small>
-              </div>
-              <span className="overview-number">03</span>
-            </div>
+        <div className="col-12 col-xl-5">
+          <div className="content-card h-100">
+            <CardHeading title="Recent Activities" subtitle="Latest actions in the system" />
+            {activities.error && <Alert onRetry={activities.reload}>{activities.error}</Alert>}
+            {activities.loading && !activities.data && [0, 1, 2, 3].map((i) => <span key={i} className="bp-skeleton" style={{ margin: "18px 0" }} />)}
+            {activities.data?.length === 0 && <EmptyState title="No activity yet" />}
+            <ul className="bp-activity">
+              {(activities.data || []).map((a) => (
+                <li key={a.id}>
+                  <div className="bp-activity-icon"><Activity size={15} /></div>
+                  <div>
+                    <strong>{activityTitle(a)}</strong>
+                    <small>{actorName(a)} · {timeAgo(a.createdAt)}</small>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>
