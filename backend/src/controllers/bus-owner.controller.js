@@ -1,6 +1,8 @@
 const { Op } = require("sequelize");
 const { BusOwner, TourAssignment } = require("../models");
-const { getPagination, buildMeta } = require("../utils/pagination");
+const { getPagination, buildMeta, getSort } = require("../utils/pagination");
+
+const SORTABLE = { ownerName: "ownerName", email: "email", status: "status", createdAt: "createdAt" };
 const {
   isNonEmptyString,
   isValidEmail,
@@ -100,11 +102,12 @@ const getAllBusOwners = async (req, res, next) => {
 
     // Optional ?page=&limit= (without them every owner is returned, as before)
     const paging = getPagination(req.query);
+    const order = getSort(req.query, SORTABLE, [["createdAt", "DESC"]]);
 
     if (paging) {
       const { rows, count } = await BusOwner.findAndCountAll({
         where,
-        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        order,
         limit: paging.limit,
         offset: paging.offset,
       });
@@ -117,7 +120,7 @@ const getAllBusOwners = async (req, res, next) => {
       });
     }
 
-    const owners = await BusOwner.findAll({ where, order: [["createdAt", "DESC"]] });
+    const owners = await BusOwner.findAll({ where, order });
 
     return res.status(200).json({
       success: true,

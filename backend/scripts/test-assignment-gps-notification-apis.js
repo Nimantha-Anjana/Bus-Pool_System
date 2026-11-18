@@ -286,6 +286,13 @@ const tokenFromLink = (link) => decodeURIComponent(link.split("/api/assignment-a
 
     const saved = await request("POST", "/driver/gps", { token: d1, body: { ...point, recordedAt: new Date(Date.now() - 60000).toISOString() } });
     check("save a GPS point -> 201", saved.status === 201 && saved.json?.data?.saved === 1, JSON.stringify(saved.json));
+    // Update-frequency control: a second single point right away is refused (429 + Retry-After) ...
+    const tooFast = await request("POST", "/driver/gps", { token: d1, body: { latitude: 6.93, longitude: 79.87 } });
+    check("second point too soon -> 429 with Retry-After", tooFast.status === 429 && !!tooFast.headers.get("retry-after"), JSON.stringify(tooFast.json));
+    const gpsConfig = await request("GET", "/driver/gps/config", { token: d1 });
+    check("driver GPS config says canSend", gpsConfig.status === 200 && gpsConfig.json?.data?.canSend === true, JSON.stringify(gpsConfig.json));
+    // ... and accepted again after the minimum interval
+    await new Promise((resolve) => setTimeout(resolve, ((Number(process.env.GPS_MIN_INTERVAL_SECONDS) || 5) + 1) * 1000));
     const noId = await request("POST", "/driver/gps", { token: d1, body: { latitude: 6.93, longitude: 79.87 } });
     check("assignmentId is optional (auto-detected) -> 201", noId.status === 201, JSON.stringify(noId.json));
     const batch = await request("POST", "/driver/gps", {
@@ -294,6 +301,9 @@ const tokenFromLink = (link) => decodeURIComponent(link.split("/api/assignment-a
     });
     check("batch of 3 points -> 201", batch.status === 201 && batch.json?.data?.saved === 3, JSON.stringify(batch.json));
     check("too many points -> 400", (await request("POST", "/driver/gps", { token: d1, body: { points: Array.from({ length: 101 }, () => ({ latitude: 6.9, longitude: 79.8 })) } })).status === 400);
+
+    const live = await request("GET", "/admin/gps/live", { token: admin });
+    check("live map endpoint lists the bus", live.status === 200 && Array.isArray(live.json?.data) && live.json.data.some((row) => row.bus?.id === busA && row.location?.googleMapsUrl), JSON.stringify(live.json).slice(0, 300));
 
     const location = await request("GET", `/admin/buses/${busA}/location`, { token: admin });
     // latest = the point without recordedAt (stamped "now"), latitude 6.93

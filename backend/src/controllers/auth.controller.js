@@ -22,13 +22,40 @@ const {
 
 const REFRESH_COOKIE_NAME = "bus_pool_refresh";
 
+// Failed-login throttle per e-mail (on top of the per-IP rate limit): 5 failures / 15 minutes -> locked for the rest of the window
+const MAX_FAILED_LOGINS = 5;
+const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const failedLogins = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of failedLogins) if (entry.resetAt <= now) failedLogins.delete(key);
+}, 60 * 1000).unref();
+
+const loginLockedFor = (email) => {
+  const entry = failedLogins.get(email);
+  if (!entry || entry.resetAt <= Date.now() || entry.count < MAX_FAILED_LOGINS) return 0;
+  return Math.ceil((entry.resetAt - Date.now()) / 1000);
+};
+
+const recordFailedLogin = (email) => {
+  const now = Date.now();
+  const entry = failedLogins.get(email);
+  if (!entry || entry.resetAt <= now) failedLogins.set(email, { count: 1, resetAt: now + FAILED_LOGIN_WINDOW_MS });
+  else entry.count += 1;
+};
+
 // Hash of a random string, only used to equalise login timing for unknown e-mails
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("not-a-real-password", 12);
 
+// SameSite=None is only accepted by browsers together with Secure
+const cookieSecure = () => environment.nodeEnv === "production" || environment.cookie.sameSite === "none";
+
 const cookieOptions = () => ({
   httpOnly: true,
-  secure: environment.nodeEnv === "production",
-  sameSite: "lax",
+  secure: cookieSecure(),
+  sameSite: environment.cookie.sameSite,
+  domain: environment.cookie.domain,
   path: "/api/auth",
   maxAge: getDurationMs(environment.jwt.refreshExpiresIn),
 });
@@ -40,8 +67,9 @@ const setRefreshCookie = (res, token) => {
 const clearRefreshCookie = (res) => {
   res.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
-    secure: environment.nodeEnv === "production",
-    sameSite: "lax",
+    secure: cookieSecure(),
+    sameSite: environment.cookie.sameSite,
+    domain: environment.cookie.domain,
     path: "/api/auth",
   });
 };
@@ -132,9 +160,20 @@ const login = async (req, res, next) => {
       });
     }
 
+    const emailKey = email.trim().toLowerCase();
+
+    const lockedFor = loginLockedFor(emailKey);
+    if (lockedFor > 0) {
+      res.setHeader("Retry-After", lockedFor);
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed login attempts. Please try again later.",
+      });
+    }
+
     const user = await User.findOne({
       where: {
-        email: email.trim().toLowerCase(),
+        email: emailKey,
       },
       include: [
         {
@@ -153,6 +192,14 @@ const login = async (req, res, next) => {
     if (!user) {
       // Spend the same time as a real check so response time does not reveal which e-mails exist
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      recordFailedLogin(emailKey);
+
+      await logActivity({
+        req,
+        action: "auth.login_failed",
+        entityType: "users",
+        description: `Failed login for unknown account ${emailKey.slice(0, 120)}.`,
+      });
 
       return res.status(401).json({
         success: false,
@@ -166,11 +213,24 @@ const login = async (req, res, next) => {
     );
 
     if (!passwordMatches) {
+      recordFailedLogin(emailKey);
+
+      await logActivity({
+        req,
+        userId: user.id,
+        action: "auth.login_failed",
+        entityType: "users",
+        entityId: user.id,
+        description: "Failed login: wrong password.",
+      });
+
       return res.status(401).json({
         success: false,
         message: "Invalid email or password.",
       });
     }
+
+    failedLogins.delete(emailKey);
 
     const accountError = validateAccount(user);
 
@@ -383,6 +443,21 @@ const logout = async (req, res, next) => {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
     if (refreshToken) {
+      const stored = await RefreshToken.findOne({
+        where: { tokenHash: hashToken(refreshToken), revokedAt: null },
+        attributes: ["userId"],
+      });
+      if (stored) {
+        await logActivity({
+          req,
+          userId: stored.userId,
+          action: "auth.logout",
+          entityType: "users",
+          entityId: stored.userId,
+          description: "User logged out.",
+        });
+      }
+
       await RefreshToken.update(
         { revokedAt: new Date() },
         {
@@ -444,6 +519,14 @@ const logoutAllDevices = async (req, res, next) => {
     );
 
     await transaction.commit();
+
+    await logActivity({
+      req,
+      action: "auth.logout_all",
+      entityType: "users",
+      entityId: user.id,
+      description: "User logged out from all devices.",
+    });
 
     clearRefreshCookie(res);
 
@@ -559,6 +642,14 @@ const changePassword = async (req, res, next) => {
     );
 
     await transaction.commit();
+
+    await logActivity({
+      req,
+      action: "auth.password_change",
+      entityType: "users",
+      entityId: user.id,
+      description: "User changed their password.",
+    });
 
     clearRefreshCookie(res);
 

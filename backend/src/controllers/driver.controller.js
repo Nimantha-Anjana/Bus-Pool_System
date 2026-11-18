@@ -10,7 +10,9 @@ const {
   RefreshToken,
 } = require("../models");
 const { removeDriverFile } = require("../middleware/driver-upload.middleware");
-const { getPagination, loadPage } = require("../utils/pagination");
+const { getPagination, loadPage, getSort } = require("../utils/pagination");
+
+const SORTABLE = { licenseExpiryDate: "licenseExpiryDate", status: "status", nic: "nic", createdAt: "createdAt" };
 const { getToday, isValidDateOnly, addDays } = require("../utils/date.utils");
 const {
   isNonEmptyString,
@@ -160,12 +162,13 @@ const getAllDrivers = async (req, res, next) => {
 
     // Optional ?page=&limit= (without them every driver is returned, as before)
     const paging = getPagination(req.query);
+    const order = getSort(req.query, SORTABLE, [["createdAt", "DESC"]]);
 
     if (paging) {
       // The search touches the user table, so the id query joins it (belongsTo only: safe with LIMIT)
       const { rows, meta } = await loadPage(Driver, {
         where,
-        order: [["createdAt", "DESC"], ["id", "DESC"]],
+        order,
         idInclude: [{ model: User, as: "user", attributes: [] }],
         fullInclude: DRIVER_INCLUDES,
         paging,
@@ -182,7 +185,7 @@ const getAllDrivers = async (req, res, next) => {
     const drivers = await Driver.findAll({
       where,
       include: DRIVER_INCLUDES,
-      order: [["createdAt", "DESC"]],
+      order,
     });
 
     return res.status(200).json({

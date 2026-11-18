@@ -55,15 +55,23 @@ const sendEmail = async ({ assignmentId = null, to, type, subject, html, text })
     attempts: 0,
   });
 
+  return deliver(log, { to, subject, html, text });
+};
+
+// Try to deliver the e-mail of an existing log row (used for the first send and for later retries).
+// `attempts` keeps counting across retries, so the retry job can give up after a limit.
+const deliver = async (log, { to, subject, html, text }) => {
   if (!environment.email.host && !isDevPreview()) {
     await log.update({
       deliveryStatus: "failed",
+      attempts: log.attempts + 1,
       errorMessage: "E-mail is not configured (SMTP_HOST is missing).",
     });
     return { status: "failed", logId: log.id, error: "E-mail is not configured." };
   }
 
   let lastError = null;
+  const firstAttempt = log.attempts;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -77,7 +85,7 @@ const sendEmail = async ({ assignmentId = null, to, type, subject, html, text })
 
       await log.update({
         deliveryStatus: "sent",
-        attempts: attempt,
+        attempts: firstAttempt + attempt,
         providerMessageId: isDevPreview() ? "dev-preview" : String(info.messageId || "").slice(0, 255),
         sentAt: new Date(),
         errorMessage: null,
@@ -88,7 +96,7 @@ const sendEmail = async ({ assignmentId = null, to, type, subject, html, text })
       return { status: "sent", logId: log.id };
     } catch (error) {
       lastError = error;
-      await log.update({ attempts: attempt });
+      await log.update({ attempts: firstAttempt + attempt });
     }
   }
 
@@ -142,12 +150,16 @@ const buildAssignmentEmail = ({ kind, detail, recipient, link, expiresAt }) => {
     assignment_updated:
       "An assignment you were part of has been changed. Your earlier response no longer applies, so please review the new details and respond again.",
     assignment_cancelled: "The assignment below has been cancelled. No further action is needed.",
+    assignment_reminder: link
+      ? `Reminder: this tour starts on ${formatDateTime(detail.assignedStartAt)} and your response is still missing. Please review the details and respond.`
+      : `Reminder: this tour starts on ${formatDateTime(detail.assignedStartAt)}. Please be ready.`,
   }[kind];
 
   const subject = {
     assignment_request: `Tour assignment: ${detail.tour.tourCode}`,
     assignment_updated: `Updated tour assignment: ${detail.tour.tourCode}`,
     assignment_cancelled: `Assignment cancelled: ${detail.tour.tourCode}`,
+    assignment_reminder: `Reminder: tour ${detail.tour.tourCode} starts soon`,
   }[kind];
 
   const tableHtml = rows
@@ -220,6 +232,8 @@ const sendAssignmentEmails = async ({ kind, detail, recipients, tokens = {}, log
 
 module.exports = {
   sendEmail,
+  deliver,
+  buildAssignmentEmail,
   sendAssignmentEmails,
   getParties,
   buildActionLink,

@@ -51,4 +51,15 @@ const loadPage = async (Model, { where, order, idInclude = [], fullInclude = [],
   return { rows: records, meta: buildMeta(paging, total) };
 };
 
-module.exports = { getPagination, buildMeta, loadPage };
+// ?sort=<field>&order=asc|desc  (only fields in `allowed`, so users cannot sort by arbitrary columns)
+//   allowed: { apiName: "modelAttribute" }     fallback: [["createdAt", "DESC"]]
+// A unique tie-breaker (id) is always added so pages never overlap.
+const getSort = (query, allowed, fallback) => {
+  const key = typeof query.sort === "string" ? query.sort : "";
+  if (!Object.prototype.hasOwnProperty.call(allowed, key)) return [...fallback, ["id", "DESC"]];
+
+  const direction = String(query.order).toLowerCase() === "desc" ? "DESC" : "ASC";
+  return [[allowed[key], direction], ["id", direction]];
+};
+
+module.exports = { getPagination, buildMeta, loadPage, getSort };

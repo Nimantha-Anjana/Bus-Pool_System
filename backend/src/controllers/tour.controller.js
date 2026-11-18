@@ -5,7 +5,16 @@ const { Tour, TourStop, TourAssignment, AssignmentActionToken, Bus, User } = req
 const { parseDateTime } = require("../utils/date.utils");
 const { isNonEmptyString, parseId, sendError } = require("../utils/validators");
 const { validateStops, mapStopRows } = require("./tour-stop.controller");
-const { getPagination, loadPage } = require("../utils/pagination");
+const { getPagination, loadPage, getSort } = require("../utils/pagination");
+
+const SORTABLE = {
+  startAt: "startAt",
+  endAt: "endAt",
+  tourName: "tourName",
+  passengerCount: "passengerCount",
+  status: "status",
+  createdAt: "createdAt",
+};
 
 const TOUR_TYPES = ["local", "foreign"];
 const ACTIVE_ASSIGNMENT_STATUSES = ["pending", "confirmed"];
@@ -154,6 +163,7 @@ const getAllTours = async (req, res, next) => {
 
     // Optional ?page=&limit= (without them every tour is returned, as before)
     const paging = getPagination(req.query);
+    const order = getSort(req.query, SORTABLE, [["startAt", "DESC"]]);
 
     if (paging) {
       // pending / scheduled are derived from the assignments: express them in SQL so the page size stays exact
@@ -168,9 +178,9 @@ const getAllTours = async (req, res, next) => {
 
       const { rows, meta } = await loadPage(Tour, {
         where,
-        order: [["startAt", "DESC"], ["id", "DESC"]],
+        order,
         fullInclude: TOUR_INCLUDES,
-        fullOrder: [["startAt", "DESC"], ["id", "DESC"], ...STOP_ORDER],
+        fullOrder: [...order, ...STOP_ORDER],
         paging,
       });
 
@@ -185,7 +195,7 @@ const getAllTours = async (req, res, next) => {
     const tours = await Tour.findAll({
       where,
       include: TOUR_INCLUDES,
-      order: [["startAt", "DESC"], ...STOP_ORDER],
+      order: [...order, ...STOP_ORDER],
     });
 
     let data = tours.map(serializeTour);
