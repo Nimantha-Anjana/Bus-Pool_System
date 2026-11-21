@@ -1,0 +1,112 @@
+/* Driver Portal (Member 02). Every class starts with "dp-". Layout / shell styles come from the shared index.css. */
+
+/* ---------- layout extras ---------- */
+.dp-link-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 10px; background: #f59e0b; color: #fff; font-size: 11px; font-weight: 800; }
+.sidebar-link.active .dp-link-badge { background: #fff; color: #2463eb; }
+.dp-bell { position: relative; text-decoration: none; }
+.dp-bell-count { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 5px; display: grid; place-items: center; border-radius: 9px; background: #dc2626; color: #fff; font-size: 10px; font-weight: 800; }
+.dp-mobile-logout { display: none; }
+.dp-boot { min-height: 100vh; display: grid; place-items: center; color: #8a96a8; }
+
+/* ---------- login ---------- */
+.dp-login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: #f5f7fb; }
+.dp-login-side { display: flex; flex-direction: column; justify-content: space-between; padding: 48px; background: linear-gradient(160deg, #111d35 0%, #1c3a78 100%); color: #fff; }
+.dp-login-side .dp-brand { display: flex; align-items: center; gap: 12px; }
+.dp-login-side .dp-brand-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; background: #2463eb; }
+.dp-login-side h1 { margin: 0 0 14px; font-size: 34px; font-weight: 800; letter-spacing: -1px; line-height: 1.15; }
+.dp-login-side p { margin: 0; max-width: 380px; color: #b6c3da; font-size: 14px; line-height: 1.7; }
+.dp-login-points { margin: 28px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.dp-login-points li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #d6e0f1; }
+.dp-login-points svg { color: #7fa6ff; flex: none; }
+.dp-login-main { display: grid; place-items: center; padding: 32px 20px; }
+.dp-login-card { width: 100%; max-width: 420px; padding: 34px; border-radius: 18px; background: #fff; box-shadow: 0 20px 50px rgba(17, 29, 53, 0.08); }
+.dp-login-card h2 { margin: 0 0 6px; font-size: 24px; font-weight: 800; letter-spacing: -0.6px; }
+.dp-login-card > p { margin: 0 0 24px; color: #8a96a8; font-size: 13px; }
+.dp-login-card .bp-btn { width: 100%; min-height: 46px; font-size: 14px; }
+.dp-pass { position: relative; }
+.dp-pass .bp-input { padding-right: 44px; }
+.dp-pass button { position: absolute; right: 6px; bottom: 4px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: #8a96a8; cursor: pointer; }
+.dp-pass button:hover { color: #2463eb; }
+.dp-demo { margin-top: 18px; padding: 12px 14px; border-radius: 10px; background: #f0f5ff; color: #3267df; font-size: 12px; line-height: 1.6; }
+.dp-demo strong { display: block; margin-bottom: 2px; }
+.dp-login-foot { margin-top: 18px; color: #8a96a8; font-size: 12px; text-align: center; }
+
+/* ---------- tour cards ---------- */
+.dp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.dp-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid #e9edf4; border-radius: 14px; background: #fff; color: inherit; text-decoration: none; transition: 0.15s ease; }
+a.dp-card:hover { border-color: #c5d6f7; box-shadow: 0 10px 24px rgba(17, 29, 53, 0.07); transform: translateY(-2px); }
+.dp-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.dp-card h6 { margin: 0 0 3px; font-size: 15px; font-weight: 800; letter-spacing: -0.2px; }
+.dp-card small { color: #8a96a8; font-size: 11.5px; }
+.dp-card-route { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+.dp-card-route svg { color: #a3aebf; flex: none; }
+.dp-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: #596579; font-size: 12px; }
+.dp-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.dp-meta svg { color: #8a96a8; }
+.dp-card-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid #eef1f6; }
+.dp-card-actions .bp-btn { flex: 1; }
+.dp-note { padding: 10px 12px; border-radius: 9px; background: #fdecec; color: #b42318; font-size: 12px; }
+
+/* ---------- tabs ---------- */
+.dp-tabs { display: flex; gap: 8px; margin-bottom: 18px; overflow-x: auto; padding-bottom: 4px; }
+.dp-tab { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 14px; border: 1px solid #e3e8f1; border-radius: 20px; background: #fff; color: #596579; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: 0.15s ease; }
+.dp-tab:hover { border-color: #c5d6f7; color: #2463eb; }
+.dp-tab.active { border-color: #2463eb; background: #2463eb; color: #fff; }
+.dp-tab em { font-style: normal; min-width: 20px; padding: 1px 6px; border-radius: 10px; background: rgba(36, 99, 235, 0.1); font-size: 11px; font-weight: 800; text-align: center; }
+.dp-tab.active em { background: rgba(255, 255, 255, 0.22); }
+
+/* ---------- dashboard ---------- */
+.dp-current { display: flex; flex-direction: column; gap: 18px; padding: 24px; border-radius: 16px; background: linear-gradient(135deg, #1c3a78 0%, #2463eb 100%); color: #fff; }
+.dp-current .dp-live { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 5px 12px; border-radius: 20px; background: rgba(255, 255, 255, 0.16); font-size: 11px; font-weight: 700; letter-spacing: 0.6px; }
+.dp-current .dp-live i { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: dp-pulse 1.4s ease infinite; }
+.dp-current h4 { margin: 0 0 6px; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.dp-current p { margin: 0; color: #cfdcf7; font-size: 13px; }
+.dp-current .dp-current-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.dp-current .bp-btn-outline { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.35); color: #fff; }
+.dp-current .bp-btn-outline:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); }
+.dp-current .bp-btn-primary { background: #fff; color: #1c3a78; }
+.dp-current .bp-btn-primary:hover:not(:disabled) { background: #eaf1ff; }
+@keyframes dp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.dp-list { margin: 0; padding: 0; list-style: none; }
+.dp-list li { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid #f0f2f7; }
+.dp-list li:last-child { border-bottom: 0; }
+.dp-list-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; background: #e9f1ff; color: #2463eb; }
+.dp-list-body { flex: 1; min-width: 0; }
+.dp-list-body strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.dp-list-body small { display: block; margin-top: 3px; color: #8a96a8; font-size: 11.5px; }
+.dp-list a { color: inherit; text-decoration: none; }
+
+.dp-note-item.unread strong::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #2463eb; }
+.dp-note-item .dp-list-icon { background: #fff4df; color: #c18118; }
+
+/* ---------- GPS ---------- */
+.dp-gps { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.dp-gps-ring { width: 84px; height: 84px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #eef1f6; color: #8a96a8; }
+.dp-gps-ring.on { background: #e5f7ed; color: #168b56; animation: dp-ring 2s ease infinite; }
+.dp-gps-ring.blocked { background: #fff4df; color: #c18118; }
+@keyframes dp-ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(22, 139, 86, 0.3); } 50% { box-shadow: 0 0 0 14px rgba(22, 139, 86, 0); } }
+.dp-gps h5 { margin: 0 0 4px; font-size: 18px; font-weight: 800; }
+.dp-gps p { margin: 0; color: #8a96a8; font-size: 12.5px; }
+.dp-gps .bp-btn { min-height: 46px; padding: 0 26px; font-size: 14px; }
+.dp-gps-body { flex: 1 1 220px; min-width: 0; }
+.dp-tips { margin: 0; padding-left: 18px; color: #596579; font-size: 12.5px; line-height: 1.9; }
+
+/* ---------- profile ---------- */
+.dp-strength { display: flex; gap: 5px; margin-top: 8px; }
+.dp-strength span { flex: 1; height: 4px; border-radius: 4px; background: #e5e9f1; }
+.dp-strength span.on { background: #16a34a; }
+
+@media (max-width: 991px) {
+  .dp-login { grid-template-columns: minmax(0, 1fr); }
+  .dp-login-side { display: none; }
+}
+@media (max-width: 767px) {
+  .dp-mobile-logout { display: inline-grid; }
+  .dp-grid { grid-template-columns: minmax(0, 1fr); }
+  .dp-current { padding: 18px; }
+  .dp-current .dp-current-actions .bp-btn { flex: 1; }
+  .dp-login-card { padding: 24px 20px; box-shadow: none; }
+  .dp-gps { flex-direction: column; align-items: flex-start; }
+  .dp-gps .bp-btn { width: 100%; }
+}
